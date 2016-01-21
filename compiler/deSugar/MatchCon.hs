@@ -148,6 +148,7 @@ matchOneConLike vars ty (eqn1 : eqns)   -- All eqns for a single constructor
               shift (_, (EqnInfo { eqn_pats = ps })) = pprPanic "matchOneCon/shift" (ppr ps)
 
         ; arg_vars <- selectConMatchVars val_arg_tys args1
+        ; pprTrace "RAE10" (ppr arg_vars $$ ppr (map idType arg_vars) $$ ppr eqn1 $$ ppr val_arg_tys $$ ppr inst_tys $$ ppr con1 $$ ppr arg_tys $$ ppr wrapper1 $$ ppr args1 ) $ return ()
                 -- Use the first equation as a source of
                 -- suggestions for the new variables
 

@@ -276,9 +276,9 @@ tidyNPat :: (HsLit -> Pat Id)   -- How to tidy a LitPat
                  -- both by Match and by Check, but they tidy LitPats
                  -- slightly differently; and we must desugar
                  -- literals consistently (see Trac #5117)
-         -> HsOverLit Id -> Maybe (SyntaxExpr Id) -> SyntaxExpr Id
+         -> HsOverLit Id -> Maybe (SyntaxExpr Id) -> SyntaxExpr Id -> Type
          -> Pat Id
-tidyNPat tidy_lit_pat (OverLit val False _ ty) mb_neg _
+tidyNPat tidy_lit_pat (OverLit val False _ ty) mb_neg _eq outer_ty
         -- False: Take short cuts only if the literal is not using rebindable syntax
         --
         -- Once that is settled, look for cases where the type of the
@@ -287,20 +287,25 @@ tidyNPat tidy_lit_pat (OverLit val False _ ty) mb_neg _
         -- NB: Watch out for weird cases like Trac #3382
         --        f :: Int -> Int
         --        f "blah" = 4
-        --     which might be ok if we hvae 'instance IsString Int'
+        --     which might be ok if we have 'instance IsString Int'
         --
-
-  | isIntTy ty,    Just int_lit <- mb_int_lit
+  | not type_change, isIntTy ty,    Just int_lit <- mb_int_lit
                             = mk_con_pat intDataCon    (HsIntPrim    "" int_lit)
-  | isWordTy ty,   Just int_lit <- mb_int_lit
+  | not type_change, isWordTy ty,   Just int_lit <- mb_int_lit
                             = mk_con_pat wordDataCon   (HsWordPrim   "" int_lit)
-  | isStringTy ty, Just str_lit <- mb_str_lit
+  | not type_change, isStringTy ty, Just str_lit <- mb_str_lit
                             = tidy_lit_pat (HsString "" str_lit)
      -- NB: do /not/ convert Float or Double literals to F# 3.8 or D# 5.3
      -- If we do convert to the constructor form, we'll generate a case
      -- expression on a Float# or Double# and that's not allowed in Core; see
      -- Trac #9238 and Note [Rules for floating-point comparisons] in PrelRules
   where
+    -- Sometimes (like in test case
+    -- overloadedlists/should_run/overloadedlistsrun04), the SyntaxExprs include
+    -- type-changing wrappers (for example, from Id Int to Int, for the identity
+    -- type family Id). In these cases, we can't do the short-cut.
+    type_change = not (outer_ty `eqType` ty)
+
     mk_con_pat :: DataCon -> HsLit -> Pat Id
     mk_con_pat con lit = unLoc (mkPrefixConPat con [noLoc $ LitPat lit] [])
 
@@ -315,8 +320,8 @@ tidyNPat tidy_lit_pat (OverLit val False _ ty) mb_neg _
                    (Nothing, HsIsString _ s) -> Just s
                    _ -> Nothing
 
-tidyNPat _ over_lit mb_neg eq
-  = NPat (noLoc over_lit) mb_neg eq
+tidyNPat _ over_lit mb_neg eq outer_ty
+  = NPat (noLoc over_lit) mb_neg eq outer_ty
 
 {-
 ************************************************************************
@@ -409,7 +414,8 @@ litValKey (HsIsString _ s) neg   = ASSERT( not neg) MachStr
 
 matchNPats :: [Id] -> Type -> [EquationInfo] -> DsM MatchResult
 matchNPats (var:vars) ty (eqn1:eqns)    -- All for the same literal
-  = do  { let NPat (L _ lit) mb_neg eq_chk = firstPat eqn1
+  = do  { let NPat (L _ lit) mb_neg eq_chk _ = firstPat eqn1
+        ; pprTrace "RAE4" (pprTvBndr var <+> ppr ty <+> ppr lit <+> ppr eq_chk) $ return ()
         ; lit_expr <- dsOverLit lit
         ; neg_lit <- case mb_neg of
                             Nothing -> return lit_expr
@@ -442,7 +448,7 @@ We generate:
 matchNPlusKPats :: [Id] -> Type -> [EquationInfo] -> DsM MatchResult
 -- All NPlusKPats, for the *same* literal k
 matchNPlusKPats (var:vars) ty (eqn1:eqns)
-  = do  { let NPlusKPat (L _ n1) (L _ lit1) lit2 ge minus = firstPat eqn1
+  = do  { let NPlusKPat (L _ n1) (L _ lit1) lit2 ge minus _ = firstPat eqn1
         ; ge_expr     <- dsExpr ge
         ; minus_expr  <- dsExpr minus
         ; lit1_expr   <- dsOverLit lit1
@@ -456,7 +462,7 @@ matchNPlusKPats (var:vars) ty (eqn1:eqns)
                    adjustMatchResult (foldr1 (.) wraps)         $
                    match_result) }
   where
-    shift n1 eqn@(EqnInfo { eqn_pats = NPlusKPat (L _ n) _ _ _ _ : pats })
+    shift n1 eqn@(EqnInfo { eqn_pats = NPlusKPat (L _ n) _ _ _ _ _ : pats })
         = (wrapBind n n1, eqn { eqn_pats = pats })
         -- The wrapBind is a no-op for the first equation
     shift _ e = pprPanic "matchNPlusKPats/shift" (ppr e)

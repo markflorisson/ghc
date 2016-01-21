@@ -1482,9 +1482,9 @@ repP (ConPatIn dc details)
                           ; MkC p <- repLP (hsRecFieldArg fld)
                           ; rep2 fieldPatName [v,p] }
 
-repP (NPat (L _ l) Nothing _)  = do { a <- repOverloadedLiteral l; repPlit a }
+repP (NPat (L _ l) Nothing _ _) = do { a <- repOverloadedLiteral l; repPlit a }
 repP (ViewPat e p _) = do { e' <- repLE e; p' <- repLP p; repPview e' p' }
-repP p@(NPat _ (Just _) _) = notHandled "Negative overloaded patterns" (ppr p)
+repP p@(NPat _ (Just _) _ _) = notHandled "Negative overloaded patterns" (ppr p)
 repP p@(SigPatIn {})  = notHandled "Type signatures in patterns" (ppr p)
         -- The problem is to do with scoped type variables.
         -- To implement them, we have to implement the scoping rules

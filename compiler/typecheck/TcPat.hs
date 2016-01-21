@@ -441,8 +441,10 @@ tc_pat penv (ListPat pats _ (Just (_,e))) pat_ty thing_inside
             <- tcSyntaxOpGen ListOrigin e (SynType (mkCheckExpType tau_pat_ty)
                                            `SynFun` SynList) $
                  \ [elt_ty] ->
-                 do { (pats', res) <- tcMultiple (\p -> tc_lpat p (mkCheckExpType elt_ty))
+                 do { traceTc "RAE1 ListPat elt_ty" (ppr elt_ty $$ ppr pats $$ ppr tau_pat_ty)
+                    ; (pats', res) <- tcMultiple (\p -> tc_lpat p (mkCheckExpType elt_ty))
                                                  pats penv thing_inside
+                    ; traceTc "RAE2 pats" (ppr pats' $$ ppr (map (hsPatType . unLoc) pats'))
                     ; return (pats', res, elt_ty) }
         ; return (ListPat pats' elt_ty (Just (tau_pat_ty,e')), res)
         }
@@ -520,12 +522,13 @@ tc_pat _ (LitPat simple_lit) pat_ty thing_inside
 -- where lit_ty is the type of the overloaded literal 5.
 --
 -- When there is no negation, neg_lit_ty and lit_ty are the same
-tc_pat _ (NPat (L l over_lit) mb_neg eq) pat_ty thing_inside
+tc_pat _ (NPat (L l over_lit) mb_neg eq _) pat_ty thing_inside
   = do  { let orig = LiteralOrigin over_lit
         ; ((lit', mb_neg'), eq')
             <- tcSyntaxOp orig eq [SynType pat_ty, SynAny]
                           (mkCheckExpType boolTy) $
                \ [neg_lit_ty] ->
+               traceTc "RAE3" (ppr over_lit $$ ppr mb_neg $$ ppr eq $$ ppr pat_ty $$ ppr neg_lit_ty) >>
                let new_over_lit lit_ty = newOverloadedLit over_lit
                                            (mkCheckExpType lit_ty)
                in case mb_neg of
@@ -537,7 +540,9 @@ tc_pat _ (NPat (L l over_lit) mb_neg eq) pat_ty thing_inside
                     \ [lit_ty] -> new_over_lit lit_ty)
 
         ; res <- thing_inside
-        ; return (NPat (L l lit') mb_neg' eq', res) }
+        ; traceTc "RAE6" (ppr eq')
+        ; pat_ty <- readExpType pat_ty
+        ; return (NPat (L l lit') mb_neg' eq' pat_ty, res) }
 
 {-
 Note [NPlusK patterns]
@@ -568,7 +573,7 @@ AST is used for the subtraction operation.
 -}
 
 -- See Note [NPlusK patterns]
-tc_pat penv (NPlusKPat (L nm_loc name) (L loc lit) _ ge minus) pat_ty thing_inside
+tc_pat penv (NPlusKPat (L nm_loc name) (L loc lit) _ ge minus _) pat_ty thing_inside
   = do  { pat_ty <- expTypeToType pat_ty
         ; let orig = LiteralOrigin lit
         ; (lit1', ge')
@@ -599,7 +604,7 @@ tc_pat penv (NPlusKPat (L nm_loc name) (L loc lit) _ ge minus) pat_ty thing_insi
         ; res <- tcExtendIdEnv1 name bndr_id thing_inside
 
         ; let pat' = NPlusKPat (L nm_loc bndr_id) (L loc lit1') lit2'
-                               ge' (mkHsWrap minus_wrap minus')
+                               ge' (mkHsWrap minus_wrap minus') pat_ty
         ; return (pat', res) }
 
 tc_pat _ _other_pat _ _ = panic "tc_pat"        -- ConPatOut, SigPatOut

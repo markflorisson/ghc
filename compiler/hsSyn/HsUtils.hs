@@ -223,8 +223,8 @@ mkHsDo         :: HsStmtContext Name -> [ExprLStmt RdrName] -> HsExpr RdrName
 mkHsComp       :: HsStmtContext Name -> [ExprLStmt RdrName] -> LHsExpr RdrName
                -> HsExpr RdrName
 
-mkNPat      :: Located (HsOverLit id) -> Maybe (SyntaxExpr id) -> Pat id
-mkNPlusKPat :: Located id -> Located (HsOverLit id) -> Pat id
+mkNPat      :: Located (HsOverLit RdrName) -> Maybe (SyntaxExpr RdrName) -> Pat RdrName
+mkNPlusKPat :: Located RdrName -> Located (HsOverLit RdrName) -> Pat RdrName
 
 mkLastStmt :: Located (bodyR idR) -> StmtLR idL idR (Located (bodyR idR))
 mkBodyStmt :: Located (bodyR RdrName)
@@ -252,8 +252,8 @@ mkHsComp ctxt stmts expr = mkHsDo ctxt (stmts ++ [last_stmt])
 mkHsIf :: LHsExpr id -> LHsExpr id -> LHsExpr id -> HsExpr id
 mkHsIf c a b = HsIf (Just noSyntaxExpr) c a b
 
-mkNPat lit neg     = NPat lit neg noSyntaxExpr
-mkNPlusKPat id lit = NPlusKPat id lit (unLoc lit) noSyntaxExpr noSyntaxExpr
+mkNPat lit neg     = NPat lit neg noSyntaxExpr placeHolderType
+mkNPlusKPat id lit = NPlusKPat id lit (unLoc lit) noSyntaxExpr noSyntaxExpr placeHolderType
 
 mkTransformStmt    :: [ExprLStmt idL] -> LHsExpr idR
                    -> StmtLR idL idR (LHsExpr idL)
@@ -835,8 +835,8 @@ collect_lpat (L _ pat) bndrs
     go (ConPatOut {pat_args=ps})  = foldr collect_lpat bndrs (hsConPatArgs ps)
         -- See Note [Dictionary binders in ConPatOut]
     go (LitPat _)                 = bndrs
-    go (NPat _ _ _)               = bndrs
-    go (NPlusKPat (L _ n) _ _ _ _)= n : bndrs
+    go (NPat {})                  = bndrs
+    go (NPlusKPat (L _ n) _ _ _ _ _)= n : bndrs
 
     go (SigPatIn pat _)           = collect_lpat pat bndrs
     go (SigPatOut pat _)          = collect_lpat pat bndrs

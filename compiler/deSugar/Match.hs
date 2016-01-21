@@ -457,8 +457,8 @@ tidy1 _ (LitPat lit)
   = return (idDsWrapper, tidyLitPat lit)
 
 -- NPats: we *might* be able to replace these w/ a simpler form
-tidy1 _ (NPat (L _ lit) mb_neg eq)
-  = return (idDsWrapper, tidyNPat tidyLitPat lit mb_neg eq)
+tidy1 _ (NPat (L _ lit) mb_neg eq ty)
+  = return (idDsWrapper, tidyNPat tidyLitPat lit mb_neg eq ty)
 
 -- Everything else goes through unchanged...
 
@@ -998,8 +998,8 @@ patGroup _ (ConPatOut { pat_con = L _ con
  | PatSynCon psyn <- con                = PgSyn psyn tys
 patGroup _ (WildPat {})                 = PgAny
 patGroup _ (BangPat {})                 = PgBang
-patGroup _ (NPat (L _ olit) mb_neg _)   = PgN   (hsOverLitKey olit (isJust mb_neg))
-patGroup _ (NPlusKPat _ (L _ olit) _ _ _)= PgNpK (hsOverLitKey olit False)
+patGroup _ (NPat (L _ olit) mb_neg _ _) = PgN   (hsOverLitKey olit (isJust mb_neg))
+patGroup _ (NPlusKPat _ (L _ olit) _ _ _ _)= PgNpK (hsOverLitKey olit False)
 patGroup _ (CoPat _ p _)                = PgCo  (hsPatType p) -- Type of innelexp pattern
 patGroup _ (ViewPat expr p _)           = PgView expr (hsPatType (unLoc p))
 patGroup _ (ListPat _ _ (Just _))       = PgOverloadedList

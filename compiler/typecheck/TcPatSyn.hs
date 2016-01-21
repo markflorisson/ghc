@@ -798,8 +798,8 @@ tcPatToExpr args = go
                                            ; return $ ExplicitTuple
                                                 (map (noLoc . Present) exprs) box }
     go1   (LitPat lit)                = return $ HsLit lit
-    go1   (NPat (L _ n) Nothing _)    = return $ HsOverLit n
-    go1   (NPat (L _ n) (Just neg) _) = return $ noLoc neg `HsApp` noLoc (HsOverLit n)
+    go1   (NPat (L _ n) Nothing _ _)  = return $ HsOverLit n
+    go1   (NPat (L _ n) (Just neg) _ _)= return $ noLoc neg `HsApp` noLoc (HsOverLit n)
     go1   (ConPatOut{})               = panic "ConPatOut in output of renamer"
     go1   (SigPatOut{})               = panic "SigPatOut in output of renamer"
     go1   (CoPat{})                   = panic "CoPat in output of renamer"
@@ -830,7 +830,7 @@ tcCollectEx pat = go pat
                                  goConDetails $ pat_args con
     go1 (SigPatOut p _)     = go p
     go1 (CoPat _ p _)       = go1 p
-    go1 (NPlusKPat n k _ geq subtract)
+    go1 (NPlusKPat n k _ geq subtract _)
       = pprPanic "TODO: NPlusKPat" $ ppr n $$ ppr k $$ ppr geq $$ ppr subtract
     go1 _                   = mempty
 

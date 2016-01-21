@@ -110,6 +110,8 @@ import Maybes
 import Data.List        ( mapAccumL, partition )
 import Control.Arrow    ( second )
 
+import GHC.Stack  -- "RAE"
+
 {-
 ************************************************************************
 *                                                                      *
@@ -344,12 +346,13 @@ readExpType_maybe (Check ty)        = return (Just ty)
 readExpType_maybe (Infer _ _ _ ref) = readMutVar ref
 
 -- | Extract a type out of an ExpType. Otherwise, panics.
-readExpType :: ExpType -> TcM TcType
+readExpType :: (?callStack :: CallStack) => ExpType -> TcM TcType
 readExpType exp_ty
   = do { mb_ty <- readExpType_maybe exp_ty
        ; case mb_ty of
            Just ty -> return ty
-           Nothing -> pprPanic "Unknown expected type" (ppr exp_ty) }
+           Nothing -> pprSTrace (text "RAE") $
+                      pprPanic "Unknown expected type" (ppr exp_ty) }
 
 -- | Write into an 'ExpType'. It must be an 'Infer'.
 writeExpType :: ExpType -> TcType -> TcM ()

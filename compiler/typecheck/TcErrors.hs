@@ -2217,7 +2217,15 @@ relevantBindings want_filtering ctxt ct
       = case tc_bndr of
           TcIdBndr id top_lvl -> go2 (idName id) (idType id) top_lvl
           TcIdBndr_ExpType name et top_lvl ->
-            do { ty <- readExpType et
+            do { mb_ty <- readExpType_maybe et
+                   -- et really should be filled in by now. But there's a chance
+                   -- it hasn't, if, say, we're reporting a kind error en route to
+                   -- checking a term. See test indexed-types/should_fail/T8129
+               ; ty <- case mb_ty of
+                   Just ty -> return ty
+                   Nothing -> do { traceTc "Defaulting an ExpType in relevantBindings"
+                                     (ppr et)
+                                 ; expTypeToType et }
                ; go2 name ty top_lvl }
       where
         go2 id_name id_type top_lvl

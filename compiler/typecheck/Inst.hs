@@ -381,6 +381,7 @@ newNonTrivialOverloadedLit orig
                       \_ -> return ()
         ; let witness = HsApp (noLoc fi') (nlHsLit hs_lit)
         ; res_ty <- readExpType res_ty
+        ; traceTc "RAE5" (ppr val $$ ppr witness $$ ppr res_ty)
         ; return (lit { ol_witness = witness
                       , ol_type = res_ty
                       , ol_rebindable = rebindable }) }

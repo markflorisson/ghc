@@ -572,7 +572,13 @@ tcSubTypeO origin ctxt ty_actual ty_expected
                                    , pprUserTypeCtxt ctxt
                                    , ppr ty_actual
                                    , ppr ty_expected ])
-       ; tc_sub_type origin origin ctxt ty_actual ty_expected }
+       ; tc_sub_type eq_orig origin ctxt ty_actual ty_expected }
+  where
+    eq_orig | TypeEqOrigin {} <- origin = origin
+            | otherwise
+            = TypeEqOrigin { uo_actual   = ty_actual
+                           , uo_expected = ty_expected
+                           , uo_thing    = Nothing }
 
 tcSubTypeDS :: Outputable a => UserTypeCtxt -> Maybe a  -- ^ has type ty_actual
             -> TcSigmaType -> ExpRhoType -> TcM HsWrapper
@@ -758,8 +764,11 @@ tc_sub_type_ds eq_orig inst_orig ctxt ty_actual ty_expected
       | let (tvs, theta, _) = tcSplitSigmaTy ty_a
       , not (null tvs && null theta)
       = do { (in_wrap, in_rho) <- topInstantiate inst_orig ty_a
-           ; body_wrap <- tc_sub_type_ds (eq_orig { uo_actual = in_rho })
-                                         inst_orig ctxt in_rho ty_e
+           ; body_wrap <- tc_sub_type_ds
+                            (eq_orig { uo_actual = in_rho
+                                     , uo_expected =
+                                         mkCheckExpType ty_expected })
+                            inst_orig ctxt in_rho ty_e
            ; return (body_wrap <.> in_wrap) }
 
       | otherwise   -- Revert to unification
