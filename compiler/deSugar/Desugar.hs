@@ -73,6 +73,101 @@ import Control.Monad( when )
 import Data.Map (Map)
 import qualified Data.Map as Map
 
+import UniqSet (UniqSet, foldUniqSet)
+import Numeric (showHex)
+
+import System.FilePath ((</>))
+
+-------------------------------------------------------------------
+-------------------------------------------------------------------
+
+
+-- Cannot depend on Aeson, as phase 1 does not allow external dependencies
+data JSON
+    = JSONList [JSON]
+    | JSONDict [(JSON, JSON)]
+    | JSONStr  String
+    | JSONInt  Int
+
+(.=) :: String -> JSON -> (JSON, JSON)
+s .= j = (JSONStr s, j)
+
+jsonString :: JSON -> String
+jsonString (JSONList xs)
+    = "[" ++ commas (map jsonString xs) ++ "]"
+jsonString (JSONDict pairs)
+    = "{" ++
+          commas [ jsonString x ++ ": " ++ jsonString y | (x,y) <- pairs ]
+       ++ "}"
+jsonString (JSONStr s)
+    = escape s
+jsonString (JSONInt i)
+    = show i
+
+escape :: String -> String
+escape s = "\"" ++ concatMap esc s ++ "\""
+    where
+        -- Adapted from Data.Aeson
+        esc '\"' = "\\\""
+        esc '\\' = "\\\\"
+        esc '\n' = "\\n"
+        esc '\r' = "\\r"
+        esc '\t' = "\\t"
+        esc c
+            | c < '\x20' = "\\u" ++ replicate (4 - length h) '0' ++ h
+            | otherwise  = [c]
+            where h = showHex (fromEnum c) ""
+
+-- brackets' l r s = l : s ++ [r]
+
+commas :: [String] -> String
+commas = concat . intersperse ","
+
+
+getExternalNames :: UnitId -> NameSet -> NameSet
+getExternalNames thisPkg = filterNameSet isExternal
+    where
+        isExternal n = isExternalName n                        -- name is external
+                    && not (isWiredInName n)                   -- not a built-in name
+                    && moduleUnitId (nameModule n) /= thisPkg  -- not defined in this package
+
+dumpNameSet :: UnitId -> Module -> NameSet -> IO ()
+dumpNameSet thisPkg thisMod names = writeFile fn json
+    where
+        modName = moduleNameString $ moduleName thisMod
+        fn      = "ExternalSymbols" </> modName ++ ".json"
+        json    = jsonString $ JSONDict
+                      [ "definingPackage" .= jsonPackage thisPkg
+                      , "exportedNames"   .= jsonNames (setToList names)
+                      ]
+
+setToList :: UniqSet a -> [a]
+setToList = foldUniqSet (:) []
+
+jsonNames :: [Name] -> JSON
+jsonNames = JSONList . map jsonName
+    where
+        jsonName :: Name -> JSON
+        jsonName name
+            = let mod = nameModule name
+              in  JSONDict [ "package" .= jsonPackage (moduleUnitId mod)
+                           , "module"  .= jsonModule  mod
+                           , "name"    .= jsonSymName name
+                           ]
+
+jsonPackage :: UnitId -> JSON
+jsonPackage = JSONStr . unitIdString
+
+jsonModule :: Module -> JSON
+jsonModule = JSONStr . moduleNameString . moduleName
+
+jsonSymName :: Name -> JSON
+jsonSymName = JSONStr . occNameString . nameOccName
+
+-------------------------------------------------------------------
+-------------------------------------------------------------------
+
+
 -- | Extract information from the rename and typecheck phases to produce
 -- a dependencies information for the module being compiled.
 mkDependencies :: TcGblEnv -> IO Dependencies
@@ -356,6 +451,10 @@ deSugar hsc_env
 
         ; let used_names = mkUsedNames tcg_env
         ; deps <- mkDependencies tcg_env
+
+        ; let dflags = hsc_dflags hsc_env
+        ; let this_pkg = thisPackage dflags
+        ; dumpNameSet this_pkg mod (getExternalNames this_pkg used_names)
 
         ; used_th <- readIORef tc_splice_used
         ; dep_files <- readIORef dependent_files
